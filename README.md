@@ -1,70 +1,68 @@
-# Claude Code CLI 源代碼深度分析
+# 從 Claude Code 源碼學 Agent 設計
 
-> 基於 Claude Code v2.1.90 反編譯源碼的完整架構分析與教學指南
+> 基於 Claude Code v2.1.90（512,685 行 TypeScript）的逐行拆解
+> 從概念到源碼，教你 Anthropic 如何設計生產級 AI Agent
+
+---
+
+## 這本書在講什麼？
+
+Claude Code 是 Anthropic 官方的 CLI Agent——不是 demo，不是論文，是每天被數十萬開發者使用的生產系統。
+
+這本書把它的 512K 行源碼拆開，提取出四個最值得學習的 Agent 設計模式，從概念到逐行源碼帶你走一遍。
 
 ## 目錄
 
-| 章節 | 內容 | 檔案 |
-|------|------|------|
-| 1 | [專案結構總覽](docs/01-project-structure.md) | 1,902 個源碼檔、512,685 行 TypeScript |
-| 2 | [核心架構設計模式](docs/02-architecture.md) | 入口點、啟動流程、React Ink TUI |
-| 3 | [請求/回應生命週期](docs/03-request-lifecycle.md) | 從用戶輸入到 API 回應的完整流程 |
-| 4 | [Tool 系統](docs/04-tool-system.md) | 43 個內建工具、註冊、執行、並發控制 |
-| 5 | [Plugin/Skill 載入機制](docs/05-plugin-skill-system.md) | Marketplace、三層模型、熱重載 |
-| 6 | [Hook 系統](docs/06-hook-system.md) | 27 種 hook 事件、5 種執行類型 |
-| 7 | [Permission 模型](docs/07-permission-model.md) | 模式、規則匹配、設定階層 |
-| 8 | [MCP 整合](docs/08-mcp-integration.md) | 伺服器連接、工具發現、Elicitation |
-| 9 | [Session 與 Memory 管理](docs/09-session-memory.md) | 狀態管理、記憶抽取、壓縮 |
+### Part I：基礎
 
-### 四大重點深度分析
-
-| 章節 | 內容 | 檔案 |
+| 章節 | 內容 | 行數 |
 |------|------|------|
-| 10 | [**學 Anthropic 怎麼寫 System Prompt**](docs/10-focus-system-prompt-engineering.md) | 工具約束、風險控制、輸出規範、過度工程防護 |
-| 11 | [**拆解多 Agent 協作架構（Swarm）**](docs/11-focus-multi-agent-swarm.md) | Coordinator、權限佇列、原子認領、Team Memory |
-| 12 | [**上下文壓縮策略**](docs/12-focus-context-compression.md) | 三層壓縮：MicroCompact → AutoCompact → Full Compact |
-| 13 | [**AutoDream 記憶整理機制**](docs/13-focus-autodream-memory.md) | 四階段：Orient → Gather → Consolidate → Prune |
+| [Ch01: 什麼是 Coding Agent](book/ch01-what-is-coding-agent.md) | 三代演進、512K 行怎麼組織、Agent 設計的五大核心問題 | 345 |
+| [Ch02: 一個問題的完整旅程](book/ch02-request-lifecycle.md) | 從用戶輸入到回答——入口點、API 通訊、工具執行、錯誤處理的完整生命週期 | 1,698 |
+
+### Part II：四大設計模式（逐行級深度）
+
+| 章節 | 核心問題 | 行數 |
+|------|---------|------|
+| [Ch03: System Prompt 工程化](book/ch03-system-prompt-engineering.md) | 如何把 prompt 從「寫得好」變成「行為規格書」——工具約束、風險控制、過度工程防護 | 1,602 |
+| [Ch04: 多 Agent 協作架構](book/ch04-multi-agent-swarm.md) | 如何讓多個 Agent 安全並行——Coordinator、Permission Queue、原子認領、Team Memory | 2,225 |
+| [Ch05: 三層上下文壓縮](book/ch05-context-compression.md) | 如何管理有限的 context window——MicroCompact（零成本）→ AutoCompact → Full Compact | 1,583 |
+| [Ch06: AutoDream 記憶系統](book/ch06-autodream-memory.md) | 如何讓 AI 有長期記憶——即時抽取 + 定期整理的雙層架構 | 1,649 |
+
+**總計：9,102 行教學文件**
+
+## 四個可直接帶走的設計模式
+
+### 1. System Prompt 工程化
+傳統寫法：「盡量幫助使用者」。Anthropic 的寫法：工具禁令（Do NOT）、可逆性決策矩陣、過度工程抑制清單、數值錨定（≤25 字）。可以直接套用到任何 AI 產品。
+
+### 2. 多 Agent 協作（Swarm）
+不需要 Redis/RabbitMQ——用檔案鎖 + JSON 做 IPC、兩目錄佇列解耦請求/回應、CAS 原子認領解決競態、Leader 審批模式保持人類控制。
+
+### 3. 三層上下文壓縮
+MicroCompact 不呼叫 API 就能釋放空間（最聰明的優化）。AutoCompact 用斷路器防死循環。Full Compact 壓縮後精選重新注入 50K token 的檔案和 skill。
+
+### 4. AutoDream 記憶整理
+觸發條件從便宜到貴排列（stat → scan → lock）。四階段整理（Orient → Gather → Consolidate → Prune）。記憶分四類（user/feedback/project/reference）。MEMORY.md 200 行硬限制。
 
 ## 源碼來源
 
-- **NPM 包**: `@anthropic-ai/claude-code@2.1.90`（bundled 為單一 cli.js，16,911 行 minified）
+- **NPM 包**: `@anthropic-ai/claude-code@2.1.90`
 - **反編譯源碼**: [Leolai6-7/claude-code-source-code](https://github.com/Leolai6-7/claude-code-source-code)
 
-## 技術棧
+## 適合誰讀？
 
-- **語言**: TypeScript (strict mode)
-- **Runtime**: Bun (primary) / Node.js 18+ (fallback)
-- **UI 框架**: React Ink（終端 TUI）
-- **打包工具**: Bun bundler → 單一 cli.js
-- **Schema 驗證**: Zod
-- **API 通訊**: Anthropic Messages API
-- **遙測**: OpenTelemetry + gRPC exporters
+| 讀者 | 建議路徑 | 時間 |
+|------|---------|------|
+| 產品經理 / 技術主管 | Ch01 | 15 分鐘 |
+| 想了解 Agent 架構的工程師 | Ch01 → Ch02 | 30 分鐘 |
+| 做 Agent 產品的工程師 | Ch01 → Ch02 → 挑一章深入 | 1-2 小時 |
+| 想完整學習的人 | 全部 6 章 | 半天 |
 
-## 模組規模 (按行數)
+## 補充資料
 
-```
-180,472  utils/          — 工具函式庫（權限、設定、Git、MCP、Shell...）
- 81,546  components/     — React Ink UI 元件
- 53,680  services/       — 核心服務（API、MCP、Plugin、LSP、OAuth...）
- 50,828  tools/          — 43 個內建工具實作
- 26,449  commands/       — 90+ 個 slash 命令
- 19,842  ink/            — Ink 渲染引擎客製層
- 19,204  hooks/          — Hook 執行與通知系統
- 12,613  bridge/         — IDE bridge 通訊
- 12,353  cli/            — CLI 解析與 transport
-  5,977  screens/        — 全螢幕 UI（onboarding、settings）
-  4,081  native-ts/      — 原生 TS 實作（color-diff、file-index、yoga）
-  4,066  skills/         — Skill 載入與 bundled skills
-  4,051  entrypoints/    — 入口點（CLI、SDK、MCP server）
-  3,446  types/          — 型別定義
-  3,286  tasks/          — 任務系統（Agent、Remote、Shell、Dream）
-  3,159  keybindings/    — 鍵盤快捷鍵系統
-  2,648  constants/      — 常量與 system prompt
-  1,758  bootstrap/      — 啟動初始化狀態
-  1,736  memdir/         — 記憶目錄管理
-  1,513  vim/            — Vim 模式支援
-  1,298  buddy/          — Buddy 系統
-  1,190  state/          — 狀態管理 store
-  1,127  remote/         — 遠端 session
-  1,004  context/        — Context provider
-```
+`docs/` 目錄包含 13 個模組級分析文件，覆蓋 Tool 系統、Plugin 機制、Hook 系統、Permission 模型、MCP 整合等，可作為進一步參考。
+
+## License
+
+教學文件以 MIT License 發布。源碼分析基於 Anthropic 的公開 NPM 包。
